@@ -8,7 +8,6 @@ from callbacks.success_rate_callback import SuccessEvalCallback
 from envs.metaworld_wrapper import make_env
 from eval.evaluate_model import evaluate_final_model
 
-
 # -----------------------------
 # Main training
 # -----------------------------
@@ -74,16 +73,12 @@ if __name__ == "__main__":
     # train_model(prev_model="checkpoints\peg_insert_side\sac_metaworld_peg_insert_1000000_steps.zip", env_name="peg-insert-side-v3", device="cuda")
 
     # Model Evaluation
-    model = SAC.load("sac_metaworld_final.zip")
+    model = SAC.load("models/peg_insert_side/peg_insert_final.zip")
     env_name = "peg-insert-side-v3"
 
-    success_rate, avg_reward = evaluate_final_model(
+    evaluate_final_model(
         model,
         lambda: make_env(env_name),
         episodes=50,
         horizon=500,
-
     )
-
-    print(f"Final success rate: {success_rate:.2f}")
-    print(f"Average reward: {avg_reward:.2f}")
