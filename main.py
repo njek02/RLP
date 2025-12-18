@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import gymnasium as gym
 import torch
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import CheckpointCallback, ProgressBarCallback
@@ -12,17 +13,23 @@ from eval.evaluate_model import evaluate_final_model
 # -----------------------------
 # Main training
 # -----------------------------
-def train_model(prev_model: str = None, env_name: str = "peg-insert-side-v3", device: str = "cuda") -> None:
-    env = make_env(env_name)
+def train_model(
+        prev_model: str = None, 
+        env_name: str = "peg-insert-side-v3", 
+        device: str = "cuda",
+        buffer: str = None
+        ) -> None:
+    env = gym.make('Meta-World/MT1', env_name=env_name)
 
     checkpoint_callback = CheckpointCallback(
         save_freq=100_000,
         save_path="./checkpoints/peg_insert_side",
         name_prefix="sac_metaworld_peg_insert",
+        save_replay_buffer=True,
     )
 
     success_callback = SuccessEvalCallback(
-        eval_env_fn=lambda: make_env(env_name),
+        eval_env_fn=lambda: gym.make('Meta-World/MT1', env_name=env_name),
         eval_freq=100_000,
         episodes=5
     )
@@ -30,6 +37,7 @@ def train_model(prev_model: str = None, env_name: str = "peg-insert-side-v3", de
     seed = 42
     np.random.seed(seed)
     torch.manual_seed(seed)
+
 
     if prev_model is None:
         model = SAC(
@@ -58,6 +66,7 @@ def train_model(prev_model: str = None, env_name: str = "peg-insert-side-v3", de
         timesteps = 2_000_000
     else:
         model = SAC.load(prev_model, env=env, device="cuda")
+        model.load_replay_buffer(buffer)
         timesteps = 2_000_000 - model.num_timesteps
 
     model.learn(
@@ -71,7 +80,11 @@ def train_model(prev_model: str = None, env_name: str = "peg-insert-side-v3", de
 
 
 if __name__ == "__main__":
-    # train_model(prev_model="checkpoints\peg_insert_side\sac_metaworld_peg_insert_1000000_steps.zip", env_name="peg-insert-side-v3", device="cuda")
+    # train_model(prev_model="checkpoints\peg_insert_side\sac_metaworld_peg_insert_1200000_steps.zip", 
+    #             env_name="peg-insert-side-v3", 
+    #             device="cuda", 
+    #             buffer="checkpoints\peg_insert_side\sac_metaworld_peg_insert_replay_buffer_1200000_steps.pkl")
+    # train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
 
     # Model Evaluation
     model = SAC.load("sac_metaworld_final.zip")
@@ -79,8 +92,8 @@ if __name__ == "__main__":
 
     success_rate, avg_reward = evaluate_final_model(
         model,
-        lambda: make_env(env_name),
-        episodes=50,
+        lambda: gym.make('Meta-World/MT1', env_name=env_name),
+        episodes=100,
         horizon=500,
 
     )

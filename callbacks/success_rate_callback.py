@@ -11,21 +11,23 @@ from stable_baselines3.common.callbacks import BaseCallback
 def evaluate_success(
     model: SAC,
     make_env_fn: Callable[[], gym.Env],
-    episodes: int = 10
+    episodes: int = 10,
+    horizon: int = 500
 ) -> float:
     successes = 0
     for _ in range(episodes):
         env = make_env_fn()
-        obs, _ = env.reset()
+        obs, _ = env.reset()  # Gymnasium returns (obs, info)
         episode_success = 0
-        for _ in range(500):
+        for _ in range(horizon):
             action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(action)
             if info.get("success", 0) == 1:
                 episode_success = 1
-            if done or truncated:
+            if terminated or truncated:
                 break
         successes += episode_success
+        env.close()
     return successes / episodes
 
 
@@ -56,21 +58,22 @@ class SuccessEvalCallback(BaseCallback):
             )
             self.success_rates.append(success_rate)
             self.timesteps.append(self.num_timesteps)
-            print(
-                f"\n=== Success Rate at {self.num_timesteps} steps: "
-                f"{success_rate:.2f} ===\n"
-            )
+            if self.verbose:
+                print(
+                    f"\n=== Success Rate at {self.num_timesteps} steps: "
+                    f"{success_rate:.2f} ===\n"
+                )
         return True
 
     def plot(self):
-            if not self.success_rates:
-                print("No evaluations recorded yet.")
-                return
+        if not self.success_rates:
+            print("No evaluations recorded yet.")
+            return
 
-            plt.figure(figsize=(8, 5))
-            plt.plot(self.timesteps, self.success_rates, marker='o')
-            plt.xlabel("Timesteps")
-            plt.ylabel("Success Rate")
-            plt.title("MetaWorld Task Success Rate Over Time")
-            plt.grid(True)
-            plt.show()
+        plt.figure(figsize=(8, 5))
+        plt.plot(self.timesteps, self.success_rates, marker='o')
+        plt.xlabel("Timesteps")
+        plt.ylabel("Success Rate")
+        plt.title("MetaWorld Task Success Rate Over Time")
+        plt.grid(True)
+        plt.show()

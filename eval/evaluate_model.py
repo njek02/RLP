@@ -11,7 +11,7 @@ def evaluate_final_model(model, make_env_fn, episodes=20, horizon=200):
         ep_success = False
 
         for _ in range(horizon):
-            action, _ = model.predict(obs, deterministic=False)
+            action, _ = model.predict(obs, deterministic=True)
             obs, reward, done, truncated, info = env.step(action)
             ep_reward += reward
 
