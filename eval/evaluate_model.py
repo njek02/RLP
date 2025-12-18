@@ -19,11 +19,11 @@ def evaluate_final_model(model, make_env_fn, episodes=20, horizon=200, runs=10):
             obs, reward, done, truncated, info = env.step(action)
             ep_reward += reward
 
-                if info.get("success", 0) == 1:
-                    ep_success = True
+            if info.get("success", 0) == 1:
+                ep_success = True
 
-                if done or truncated:
-                    break
+            if done or truncated:
+                break
 
             rewards.append(ep_reward)
             successes += int(ep_success)
