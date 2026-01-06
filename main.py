@@ -121,6 +121,17 @@ def prune_mlp_remove_parametrization(model: nn.Module) -> None:
             if hasattr(module, "bias_orig"):
                 prune.remove(module, name="bias")
 
+def extract_actor_masks(actor: nn.Module) -> Dict[str, torch.Tensor]:
+    """
+    Extract weight masks from all pruned Linear layers in the actor.
+    """
+    masks = {}
+    for name, module in actor.named_modules():
+        if isinstance(module, nn.Linear) and hasattr(module, "weight_mask"):
+            masks[f"{name}.weight"] = module.weight_mask.detach().cpu().clone()
+    return masks
+
+
 
 class SACPruningCallback(BaseCallback):
     def __init__(
@@ -154,10 +165,31 @@ class SACPruningCallback(BaseCallback):
         return True
 
     def _on_training_end(self) -> None:
-        prune_mlp_remove_parametrization(self.model.policy.actor.latent_pi)
-        prune_mlp_remove_parametrization(self.model.policy.actor.mu)
-        if isinstance(self.model.policy.actor.log_std, nn.Linear):
-            prune_mlp_remove_parametrization(self.model.policy.actor.log_std)
+        # --------------------------------------------------
+        # 1. Save pruning masks BEFORE removing them
+        # --------------------------------------------------
+        actor = self.model.policy.actor
+        masks = extract_actor_masks(actor)
+
+        torch.save(
+            masks,
+            "actor_pruning_masks.pt",
+        )
+
+        if self.verbose > 0:
+            print(
+                f"[Pruning] Saved {len(masks)} pruning masks to actor_pruning_masks.pt"
+            )
+
+        # --------------------------------------------------
+        # 2. Remove pruning reparameterization (finalize)
+        # --------------------------------------------------
+        prune_mlp_remove_parametrization(actor.latent_pi)
+        prune_mlp_remove_parametrization(actor.mu)
+
+        if isinstance(actor.log_std, nn.Linear):
+            prune_mlp_remove_parametrization(actor.log_std)
+
 
 
 # -----------------------------
@@ -250,15 +282,15 @@ if __name__ == "__main__":
     #             env_name="peg-insert-side-v3",
     #             device="cuda",
     #             buffer="checkpoints\\peg_insert_side\\sac_metaworld_peg_insert_replay_buffer_1200000_steps.pkl")
-    # train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
+    train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
 
-    # Model Evaluation
-    model = SAC.load("models/peg_insert_side/peg_insert_final.zip")
-    env_name = "peg-insert-side-v3"
+    # # Model Evaluation
+    # model = SAC.load("models/peg_insert_side/peg_insert_final.zip")
+    # env_name = "peg-insert-side-v3"
 
-    evaluate_final_model(
-        model,
-        lambda: gym.make("Meta-World/MT1", env_name=env_name),
-        episodes=100,
-        horizon=500,
-    )
+    # evaluate_final_model(
+    #     model,
+    #     lambda: gym.make("Meta-World/MT1", env_name=env_name),
+    #     episodes=100,
+    #     horizon=500,
+    # )
