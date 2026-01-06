@@ -211,7 +211,7 @@ def train_model(
     env = gym.make("Meta-World/MT1", env_name=env_name)
 
     checkpoint_callback = CheckpointCallback(
-        save_freq=100_000,
+        save_freq=500_000,
         save_path="./checkpoints/peg_insert_side",
         name_prefix="sac_metaworld_peg_insert",
         save_replay_buffer=True,
@@ -220,7 +220,7 @@ def train_model(
     success_callback = SuccessEvalCallback(
         eval_env_fn=lambda: gym.make("Meta-World/MT1", env_name=env_name),
         eval_freq=100_000,
-        episodes=5,
+        episodes=10,
     )
 
     np.random.seed(SEED)
