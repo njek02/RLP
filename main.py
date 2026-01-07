@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.utils.prune as prune
 from stable_baselines3 import SAC
+from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, ProgressBarCallback
 
 from callbacks.success_rate_callback import SuccessEvalCallback
@@ -210,6 +211,11 @@ def train_model(
 ) -> None:
     env = gym.make("Meta-World/MT1", env_name=env_name)
 
+    env = make_vec_env(
+        lambda: gym.make("Meta-World/MT1", env_name=env_name),
+        n_envs=8,
+    )
+
     checkpoint_callback = CheckpointCallback(
         save_freq=500_000,
         save_path="./checkpoints/peg_insert_side",
@@ -282,15 +288,15 @@ if __name__ == "__main__":
     #             env_name="peg-insert-side-v3",
     #             device="cuda",
     #             buffer="checkpoints\\peg_insert_side\\sac_metaworld_peg_insert_replay_buffer_1200000_steps.pkl")
-    train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
+    # train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
 
-    # # Model Evaluation
-    # model = SAC.load("models/peg_insert_side/peg_insert_final.zip")
-    # env_name = "peg-insert-side-v3"
+    # Model Evaluation
+    model = SAC.load("sac_metaworld_final.zip")
+    env_name = "peg-insert-side-v3"
 
-    # evaluate_final_model(
-    #     model,
-    #     lambda: gym.make("Meta-World/MT1", env_name=env_name),
-    #     episodes=100,
-    #     horizon=500,
-    # )
+    evaluate_final_model(
+        model,
+        lambda: gym.make("Meta-World/MT1", env_name=env_name),
+        episodes=100,
+        horizon=500,
+    )
