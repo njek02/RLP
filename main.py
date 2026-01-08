@@ -10,6 +10,7 @@ import torch.nn.utils.prune as prune
 from stable_baselines3 import SAC
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, ProgressBarCallback
+from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from callbacks.success_rate_callback import SuccessEvalCallback
 from envs.metaworld_wrapper import make_env
@@ -203,17 +204,19 @@ def train_model(
     buffer: Optional[str] = None,
     total_steps: int = 2_000_000,
     prune: bool = True,
-    pruning_start: float = 0.2,
-    pruning_end: float = 0.8,
-    pruning_iterations: int = 4,
-    target_sparsity: float = 0.9,
+    pruning_start: float = 0.3,
+    pruning_end: float = 0.75,
+    pruning_iterations: int = 6,
+    target_sparsity: float = 0.65,
     use_erk: bool = False,
 ) -> None:
-    env = gym.make("Meta-World/MT1", env_name=env_name)
+    
 
     env = make_vec_env(
-        lambda: gym.make("Meta-World/MT1", env_name=env_name),
-        n_envs=8,
+        lambda: gym.make("Meta-World/MT1", env_name=env_name, disable_env_checker=True),
+        n_envs=12,
+        seed=SEED,
+        vec_env_cls=SubprocVecEnv,
     )
 
     checkpoint_callback = CheckpointCallback(
@@ -237,12 +240,12 @@ def train_model(
             policy="MlpPolicy",
             env=env,
             learning_rate=3e-4,
-            batch_size=500,
+            batch_size=512,
             gamma=0.99,
             tau=5e-3,
             ent_coef="auto",
             train_freq=1,
-            gradient_steps=1,
+            gradient_steps=8,
             buffer_size=1_000_000,
             policy_kwargs=dict(
                 net_arch=[256, 256],
@@ -288,15 +291,15 @@ if __name__ == "__main__":
     #             env_name="peg-insert-side-v3",
     #             device="cuda",
     #             buffer="checkpoints\\peg_insert_side\\sac_metaworld_peg_insert_replay_buffer_1200000_steps.pkl")
-    # train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
+    train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda", prune=True)
 
-    # Model Evaluation
-    model = SAC.load("sac_metaworld_final.zip")
-    env_name = "peg-insert-side-v3"
+    # # Model Evaluation
+    # model = SAC.load("sac_metaworld_final.zip")
+    # env_name = "peg-insert-side-v3"
 
-    evaluate_final_model(
-        model,
-        lambda: gym.make("Meta-World/MT1", env_name=env_name),
-        episodes=100,
-        horizon=500,
-    )
+    # evaluate_final_model(
+    #     model,
+    #     lambda: gym.make("Meta-World/MT1", env_name=env_name),
+    #     episodes=100,
+    #     horizon=500,
+    # )
