@@ -261,7 +261,7 @@ def train_model(
         timesteps = max(0, total_steps - model.num_timesteps)
 
     # callbacks = [checkpoint_callback, success_callback, ProgressBarCallback()]
-    callbacks = [checkpoint_callback, success_callback]
+    callbacks = [success_callback, ProgressBarCallback()]
 
     if prune:
         pruning_schedule, common_schedule = build_sac_pruning_schedule(
@@ -284,24 +284,7 @@ def train_model(
     model.save("sac_metaworld_final")
     print("Training complete! Model saved as sac_metaworld_final.zip")
 
-
-if __name__ == "__main__":
-    # train_model(prev_model="checkpoints\\peg_insert_side\\sac_metaworld_peg_insert_1200000_steps.zip",
-    #             env_name="peg-insert-side-v3",
-    #             device="cuda",
-    #             buffer="checkpoints\\peg_insert_side\\sac_metaworld_peg_insert_replay_buffer_1200000_steps.pkl")
-
-    # train_model(prev_model=None, env_name="peg-insert-side-v3", device="cuda")
-
-    # train_model(prev_model="models/peg_insert_side/peg_insert_side_init_v3.zip",
-    #             env_name="peg-insert-side-v3",
-    #             device="cuda",
-    #             prune=True,
-    # )
-
-    # Model Evaluation
-    model = SAC.load("pruned_model_final.zip")
-    env_name = "peg-insert-side-v3"
+    # Evaluate model
 
     evaluate_final_model(
         model,
@@ -309,3 +292,19 @@ if __name__ == "__main__":
         episodes=100,
         horizon=500,
     )
+
+
+
+if __name__ == "__main__":
+    
+    # Model Training
+
+    train_model(prev_model=None,
+                env_name="peg-insert-side-v3",
+                device="cuda",
+                prune=True,
+                pruning_start=0.5,
+                pruning_end=0.8,
+                pruning_iterations=3,
+                target_sparsity=0.9)
+
