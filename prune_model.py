@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 import gymnasium as gym
+import metaworld
 import numpy as np
 import torch
 import torch.nn as nn
@@ -15,7 +16,43 @@ from callbacks.success_rate_callback import SuccessEvalCallback
 from envs.metaworld_wrapper import make_env
 from eval.evaluate_model import evaluate_final_model
 
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+torch.set_float32_matmul_precision("high")  # PyTorch ≥ 2.0
+
+
 SEED = 42
+
+def randomize_masks_globally(saved_masks, sparsity, seed=None):
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    # Flatten all masks
+    flat_masks = []
+    shapes = {}
+
+    for key, mask in saved_masks.items():
+        flat_masks.append(mask.flatten())
+        shapes[key] = mask.shape
+
+    flat = torch.cat(flat_masks)
+    total = flat.numel()
+    num_zeros = int(total * sparsity)
+
+    # Create random flat mask
+    rand_flat = torch.ones(total)
+    zero_idx = torch.randperm(total)[:num_zeros]
+    rand_flat[zero_idx] = 0.0
+
+    # Split back into layer-shaped masks
+    random_masks = {}
+    idx = 0
+    for key, shape in shapes.items():
+        n = torch.prod(torch.tensor(shape)).item()
+        random_masks[key] = rand_flat[idx:idx+n].view(shape)
+        idx += n
+
+    return random_masks
 
 
 def _linear_layers(module: nn.Module) -> List[nn.Linear]:
@@ -202,12 +239,15 @@ def train_model(
     device: str = "cuda",
     buffer: Optional[str] = None,
     total_steps: int = 2_000_000,
-    prune: bool = False,
+    prune_model: bool = False,
     pruning_start: float = 0.6,
     pruning_end: float = 0.9,
     pruning_iterations: int = 3,
     target_sparsity: float = 0.7,
     use_erk: bool = False,
+    weights: str = None,
+    mask: str = None,
+    pretrained: bool = False,
 ) -> None:
     env = gym.make("Meta-World/MT1", env_name=env_name)
 
@@ -248,10 +288,19 @@ def train_model(
         )
         timesteps = total_steps
 
-        torch.save(
-            model.policy.state_dict(),
-            "initial_policy_weights.pt",
-        )
+        if weights is not None:
+            state_dict = torch.load(weights)
+
+            if pretrained:
+                for name, param in model.policy.actor.features_extractor.named_parameters():
+                    param.data.copy_(pretrained[f"actor.features_extractor.{name}"])
+            else:
+                model.policy.load_state_dict(state_dict)
+        else:
+            torch.save(
+                model.policy.state_dict(),
+                "initial_policy_weights.pt",
+            )
     else:
         print("Loading Model...")
         # Keep learned weights when switching tasks; do not reset to init.
@@ -260,10 +309,40 @@ def train_model(
             model.load_replay_buffer(buffer)
         timesteps = max(0, total_steps - model.num_timesteps)
 
-    # callbacks = [checkpoint_callback, success_callback, ProgressBarCallback()]
-    callbacks = [success_callback, ProgressBarCallback()]
+    if mask is not None:
+        # Loading masks
 
-    if prune:
+        # Apply pruning once to load in weight_mask
+        for module in model.actor.modules():
+            if isinstance(module, nn.Linear):
+                prune.l1_unstructured(module, name="weight", amount=0.0)
+
+        
+        # Load the masks
+        print("=" * 10, "Loading masks", "=" * 10)
+        masks = torch.load(mask)
+
+
+        # Apply the masks to the model
+        print("=" * 10, "Applying masks", "=" * 10)
+        for name, module in model.actor.named_modules():
+            if isinstance(module, nn.Linear) and hasattr(module, "weight_mask"):
+                key = f"{name}.weight"
+                if key in masks:
+                    print(key)
+                    module.weight_mask.data.copy_(
+                        masks[key].to(module.weight_mask.device)
+                    )
+        
+        for module in model.actor.modules():
+            if isinstance(module, nn.Linear) and hasattr(module, "weight_mask"):
+                module.weight_mask.requires_grad = False
+
+
+    # callbacks = [checkpoint_callback, success_callback, ProgressBarCallback()]
+    callbacks = [ProgressBarCallback()]
+
+    if prune_model:
         pruning_schedule, common_schedule = build_sac_pruning_schedule(
             model=model,
             total_steps=total_steps,
@@ -281,6 +360,10 @@ def train_model(
         reset_num_timesteps=False,
     )
 
+    if mask is not None:
+        prune_mlp_remove_parametrization(model.actor)
+
+
     model.save("sac_metaworld_final")
     print("Training complete! Model saved as sac_metaworld_final.zip")
 
@@ -296,15 +379,18 @@ def train_model(
 
 
 if __name__ == "__main__":
-    
+   
     # Model Training
 
     train_model(prev_model=None,
-                env_name="peg-insert-side-v3",
+                env_name="hand-insert-v3",
                 device="cuda",
-                prune=True,
-                pruning_start=0.5,
-                pruning_end=0.8,
-                pruning_iterations=3,
-                target_sparsity=0.9)
+                prune_model=False,
+                weights = None,
+                mask = "results/masks/pruned_masks_actor.pt")
 
+
+    # env = gym.make("Meta-World/MT1", env_name="hand-insert-v3")
+    # model = SAC.load("results/models/hand_insert_masked_initial_weights.zip",
+    #                   env = env,
+    #                   device="cuda")
