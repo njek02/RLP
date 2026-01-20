@@ -46,3 +46,41 @@ def plot_success_rate_se(success_rates, paper_style=False):
     plt.title("Mean Success Rate Across Runs\n(with Standard Error)")
     plt.tight_layout()
     plt.show()
+
+def plot_success_rate_se_multiple(success_rates_dict, paper_style=False, save_path=None):
+    """
+    success_rates_dict: dict
+        Keys   -> labels for each bar
+        Values -> list or array of success rates for that condition
+    """
+    if paper_style:
+        _apply_paper_style()
+
+    labels = list(success_rates_dict.keys())
+    means = []
+    ses = []
+    variances = []
+
+    for rates in success_rates_dict.values():
+        rates = np.asarray(rates)
+        means.append(np.mean(rates))
+        ses.append(np.std(rates, ddof=1) / np.sqrt(len(rates)))
+        variances.append(np.var(rates, ddof=1))
+    
+    print(means)
+    print(ses)
+    print(variances)
+
+    x = np.arange(len(labels))
+
+    plt.bar(x, means, yerr=ses, capsize=6)
+    plt.xticks(x, labels)
+    plt.ylim(0, 1)
+    plt.ylabel("Mean Success Rate")
+    plt.title("Success rate Comparison: Dense vs. Pruned Model")
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    plt.show()
