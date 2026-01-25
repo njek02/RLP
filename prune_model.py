@@ -18,12 +18,13 @@ from eval.evaluate_model import evaluate_final_model
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-torch.set_float32_matmul_precision("high")  # PyTorch ≥ 2.0
+torch.set_float32_matmul_precision("high")
 
 
-SEED = 42
+SEED = 10
 
 def randomize_masks_globally(saved_masks, sparsity, seed=None):
+    
     if seed is not None:
         torch.manual_seed(seed)
 
@@ -203,9 +204,8 @@ class SACPruningCallback(BaseCallback):
         return True
 
     def _on_training_end(self) -> None:
-        # --------------------------------------------------
+
         # 1. Save pruning masks BEFORE removing them
-        # --------------------------------------------------
         actor = self.model.policy.actor
         masks = extract_actor_masks(actor)
 
@@ -219,9 +219,7 @@ class SACPruningCallback(BaseCallback):
                 f"[Pruning] Saved {len(masks)} pruning masks to actor_pruning_masks.pt"
             )
 
-        # --------------------------------------------------
-        # 2. Remove pruning reparameterization (finalize)
-        # --------------------------------------------------
+        # 2. Remove pruning reparameterization
         prune_mlp_remove_parametrization(actor.latent_pi)
         prune_mlp_remove_parametrization(actor.mu)
 
@@ -230,9 +228,7 @@ class SACPruningCallback(BaseCallback):
 
 
 
-# -----------------------------
-# Main training
-# -----------------------------
+
 def train_model(
     prev_model: Optional[str] = None,
     env_name: str = "peg-insert-side-v3",
@@ -249,6 +245,28 @@ def train_model(
     mask: str = None,
     pretrained: bool = False,
 ) -> None:
+    """
+    Train a SAC model from scratch or from a previously trained model.
+
+    Args:
+        prev_model (Optional[str]): The path to the previously trained model. If None, the model will be trained from scratch.
+        env_name (str): The name of the Meta-World environment to use.
+        device (str): The device to use for training (either "cuda" or "cpu").
+        buffer (Optional[str]): The path to the replay buffer to use for training. If None, a new replay buffer will be created.
+        total_steps (int): The total number of time steps to train the model for.
+        prune_model (bool): Whether to prune the model during training. If True, the model will be pruned according to the pruning schedule.
+        pruning_start (float): The time step at which to start pruning.
+        pruning_end (float): The time step at which to end pruning.
+        pruning_iterations (int): The number of times to prune the model.
+        target_sparsity (float): The target sparsity of the model after pruning.
+        use_erk (bool): Whether to use the ERK algorithm for pruning.
+        weights (str): The path to the weights of a pretrained model to use for initialization.
+        mask (str): The path to the pruning masks to use for pruning.
+        pretrained (bool): Whether to load the weights of a pretrained model without pruning or not.
+
+    Returns:
+        None
+    """
     env = gym.make("Meta-World/MT1", env_name=env_name)
 
     checkpoint_callback = CheckpointCallback(
@@ -310,8 +328,6 @@ def train_model(
         timesteps = max(0, total_steps - model.num_timesteps)
 
     if mask is not None:
-        # Loading masks
-
         # Apply pruning once to load in weight_mask
         for module in model.actor.modules():
             if isinstance(module, nn.Linear):
@@ -339,7 +355,6 @@ def train_model(
                 module.weight_mask.requires_grad = False
 
 
-    # callbacks = [checkpoint_callback, success_callback, ProgressBarCallback()]
     callbacks = [ProgressBarCallback()]
 
     if prune_model:
@@ -366,8 +381,6 @@ def train_model(
 
     model.save("sac_metaworld_final")
     print("Training complete! Model saved as sac_metaworld_final.zip")
-
-    # Evaluate model
 
     evaluate_final_model(
         model,
